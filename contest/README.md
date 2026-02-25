@@ -4,8 +4,8 @@ This contest is about creating the fastest FDM simulation for the poisson equati
 
 ``` math
 \begin{aligned}
-\nabla^2 u(x, y) &= f(x, y), \quad (x, y) \in (0, 1) \times (0, 1)\\
-u(x, y) &= 0, \quad (x, y) \in \partial((0, 1) \times (0, 1)),              
+\nabla^2 u(x, y) &= f(x, y), \quad [x, y] \in \langle 0, 1\rangle \times \langle 0, 1\rangle\\
+u(x, y) &= 0, \quad (x, y) \in \partial\lbrace\langle 0, 1\rangle \times \langle 0, 1\rangle\rbrace,              
 \end{aligned}
 ```
 where $f(x, y) = 2  \pi^2  \sin(\pi x)  \sin( \pi y )$.
