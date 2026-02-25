@@ -4,7 +4,7 @@ This contest is about creating the fastest FDM simulation for the poisson equati
 
 ``` math
 \begin{aligned}
-\nabla^2 u(x, y) &= f(x, y), \quad (x, y) \in (0, 1) \times (0, 1)//
+\nabla^2 u(x, y) &= f(x, y), \quad (x, y) \in (0, 1) \times (0, 1)\\
 u(x, y) &= 0, \quad (x, y) \in \partial((0, 1) \times (0, 1)),              
 \end{aligned}
 ```
@@ -21,7 +21,7 @@ Thus, one iteration of the Jacobi method involves updating all interior grid poi
 
 For the convergence criterion the following formula will be used:
 ``` math
-\epsilon = \max_{i,j} |u_{i,j}^{new} - u_{i,j}|
+\varepsilon = \max_{i,j} |u_{i,j}^{new} - u_{i,j}|
 ```
 
 NOTE: Multiple versions will be created along the progression of the course of Programming of Engineering Applications. I will describe each version briefly. At the end of the semester I'll evaluate all the scripts.
