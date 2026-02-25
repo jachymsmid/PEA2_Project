@@ -1,32 +1,32 @@
 #include <cmath>
 #include <iostream>
 #include <vector>
+#include <utility>
 
 using RealType = float;
 
-template <class DataType>
+template <class RealType>
 class FlatArray
 {
 private:
 
     int rows, cols;
-    std::vector<DataType> data;
+    std::vector<RealType> data;
 
 public:
 
     // constructor
-    FlatArray(int r, int c) : rows(r), cols(c) {data.resize(r*c);}
+    FlatArray(int r, int c) : rows(r), cols(c), data(r*c,0.0f) {}
 
     // access the data with matrix indexing
-    DataType& operator()(int r, int c)
+    inline RealType& operator()(int r, int c)
     {
         return data[r * cols + c];
     }
 
-    // access the data with vector indexing
-    DataType& operator()(int n)
+    inline const RealType& operator()(int r, int c) const
     {
-        return data[n];
+        return data[r * cols + c];
     }
 
     // print the stored data
@@ -42,21 +42,20 @@ public:
       }
     }
 
-    void operator=(FlatArray& other)
+    // using swap instead of copying the arrays, I only need the array_old
+    // just trust the arrays are of the same size xd
+    void swap(FlatArray& other)
     {
-      for (int i = 0; i<rows; i++)
-      {
-        for (int j = 0; j<cols; j++)
-        {                                                                                                                                   
-          data[i*cols+j] = other(i,j);
-        }
-      }
+      std::swap(rows, other.rows);
+      std::swap(cols, other.cols);
+      data.swap(other.data);
     }
 
 };
 
 int main()
 {
+  // define constants
   const int n = 10; // number of nodes
   const RealType epsilon = 1e-6;
   const RealType length = 1.f;
@@ -76,46 +75,47 @@ int main()
   {
     for (int j=0; j < n; j++)
     {
+      // implicit grid coordinates
       x = i*step;
       y = j*step;
 
-      array_old(i,j) = 1.f;
+      // initial conditions
+      // access only the inner elements, the boundary elements will stay 0
+      if (i > 0 && i < n - 1 && j > 0 && j < n - 1)
+      {
+        array_old(i, j) = 1.0f;
+      }
+
+      // fill the rhs array
       f_array(i,j) = 2*pi*pi*std::sin(pi*x)*std::sin(pi*y);
     }
   }
 
   
-  RealType err,max_err=0;
-  for (int iter=0; iter < iter_stop; iter++)
+  RealType err,max_err;
+  for (int iter = 0; iter < iter_stop; iter++)
   {
-    for (int i = 1; i < n-1;i++)
+    max_err = 0;
+    // update the inner values
+    for (int i = 1; i < n-1; i++)
     {
-      for (int j = 1; j < n-1;j++)
+      for (int j = 1; j < n-1; j++)
       {
-        array_new(i,j) = 0.25*(array_old(i,j)+array_old(i,j)+array_old(i,j)+array_old(i,j))+coeff*f_array(i,j);
+        array_new(i,j) = 0.25*(array_old(i+1,j)+array_old(i-1,j)+array_old(i,j+1)+array_old(i,j-1))+coeff*f_array(i,j);
         err = std::abs(array_new(i,j)-array_old(i,j));
         if (err > max_err) max_err = err;
       }
     }
     
-    // BC
-    for (int k=0; k<n; k++)
-    {
-      // upper boundary
-      array_old(k) = 0.f;
-      // lower boundary
-      array_old((n-1)*n+k) = 0.f;
-      // left boundary
-      array_old(k*n) = 0.f;
-      // right boundary
-      array_old(k*n+(n-1)) = 0.f;
-    }
+    // BC need not be imposed as they stay zero, default value for std::vector
 
-    array_old = array_new;
+    // swap the arrays, instead of copying them
+    array_old.swap(array_new);
 
-    if (err < epsilon) break;
+    if (max_err < epsilon) break;
   }
 
   array_new.print();
+  std::cout << "Last encountered maximal grid error: " << max_err << std::endl;
   return 0;
 }
