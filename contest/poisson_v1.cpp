@@ -63,6 +63,7 @@ int main()
   const RealType step = length/(float)n;
   const RealType pi = M_PI;
   const int iter_stop = 100;
+  const RealType tolerance = 1e-6;
   const RealType coeff = step*step/4;
 
   // create thrree flattened arrays
@@ -93,36 +94,35 @@ int main()
   }
 
   
-  RealType err,max_err;
+  RealType err = tolerance + 1.0;
   int iteration;
 
   // main loop
   auto start = std::chrono::high_resolution_clock::now();
   for (int iter = 0; iter < iter_stop; iter++)
   {
-    max_err = 0;
+    err = 0.0;
     // update the inner values
     for (int i = 1; i < n-1; i++)
     {
       for (int j = 1; j < n-1; j++)
       {
         array_new(i,j) = 0.25*(array_old(i+1,j)+array_old(i-1,j)+array_old(i,j+1)+array_old(i,j-1))+coeff*f_array(i,j);
-        err = std::abs(array_new(i,j)-array_old(i,j));
-        if (err > max_err) max_err = err;
+        err = std::max(err, std::abs(array_new(i,j)-array_old(i,j)));
       }
     }
     
     // BC need not be imposed as they stay zero, default value for std::vector
     // swap the arrays, instead of copying them
     array_old.swap(array_new);
-    iteration = iter;
+    iteration = iter+1;
   }
 
   auto end = std::chrono::high_resolution_clock::now();
 
   // print the metrics
   std::cout << "Converged in " << iteration << " iterations" << std::endl;
-  std::cout << "Final Error: " << std::scientific << max_err << std::endl;
+  std::cout << "Final Error: " << std::scientific << err << std::endl;
   std::chrono::duration<double> elapsed = end - start;
   std::cout << "Elapsed time: " << elapsed.count() << " seconds" << std::endl;
 
