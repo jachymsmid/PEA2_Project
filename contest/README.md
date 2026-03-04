@@ -28,10 +28,38 @@ NOTE: Multiple versions will be created along the progression of the course of P
 
 ## Version 1
 This version is a simple, a bit optimized, sequential programm. I used flattened arrays for faster data access. I also created a class FlatArray for easier handling and some useful member function for more readable code.
-The class also features overloaded assign operator '=' for deep copies.
+The class also features `swap()` method for data swaping between two arrays (mby simple pointer swap would be faster?).
 
+Stats using the `g++ -O3 -march=native -fopt-info-vec` compile flags
+
+### n = 8192
+```txt
+
+```
+
+### n = 16384
+```txt
+
+```
+### n = 32176
+```txt
+
+```
 ## Version 2
-Simple paralelization.
+This version is optimalized sequential code, featuring loop reordering and vectorization.
 
+### n = 8192
+```txt
+
+```
+
+### n = 16384
+```txt
+
+```
+### n = 32176
+```txt
+
+```
 ## Version 3
-Better paralelization.
+Simple paralelization.
