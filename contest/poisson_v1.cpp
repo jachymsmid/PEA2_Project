@@ -73,20 +73,13 @@ int main()
 
   // fill the arrays
   float x,y;
-  for (int i=0; i < n; i++)
+  for (int i=0; i < n-1; i++)
   {
-    for (int j=0; j < n; j++)
+    for (int j=0; j < n-1; j++)
     {
       // implicit grid coordinates
       x = i*step;
       y = j*step;
-
-      // initial conditions
-      // access only the inner elements, the boundary elements will stay 0
-      if (i > 0 && i < n - 1 && j > 0 && j < n - 1)
-      {
-        array_old(i, j) = 1.0f;
-      }
 
       // fill the rhs array
       f_array(i,j) = 2*pi*pi*std::sin(pi*x)*std::sin(pi*y);
@@ -94,12 +87,12 @@ int main()
   }
 
   
-  RealType err = tolerance + 1.0;
-  int iteration;
+  RealType err;
+  std::size_t iter = 0;
 
   // main loop
   auto start = std::chrono::high_resolution_clock::now();
-  for (int iter = 0; iter < iter_stop; iter++)
+  while (iter < iter_stop)
   {
     err = 0.0;
     // update the inner values
@@ -115,21 +108,22 @@ int main()
     // BC need not be imposed as they stay zero, default value for std::vector
     // swap the arrays, instead of copying them
     array_old.swap(array_new);
-    iteration = iter+1;
+    iter++;
+    std::cout << err << std::endl;
   }
 
   auto end = std::chrono::high_resolution_clock::now();
 
   // print the metrics
-  std::cout << "Converged in " << iteration << " iterations" << std::endl;
+  std::cout << "Converged in " << iter << " iterations" << std::endl;
   std::cout << "Final Error: " << std::scientific << err << std::endl;
   std::chrono::duration<double> elapsed = end - start;
   std::cout << "Elapsed time: " << elapsed.count() << " seconds" << std::endl;
 
-  auto flopsPerSecond = (double)(n - 2) * (n - 2) * 6 * iteration / elapsed.count();
+  auto flopsPerSecond = (double)(n - 2) * (n - 2) * 7 * iter / elapsed.count();
   std::cout << "Performance: " << std::fixed << std::setprecision(2) << flopsPerSecond / 1e9 << " GFLOPS" << std::endl;
 
-  auto memoryPerSecond = (double)(n - 2) * (n - 2) * 7 * sizeof(RealType) * iteration / elapsed.count();
+  auto memoryPerSecond = (double)(n - 2) * (n - 2) * 7 * sizeof(RealType) * iter / elapsed.count();
   std::cout << "Memory Bandwidth: " << std::fixed << std::setprecision(2) << memoryPerSecond / (1024 * 1024 * 1024) << " GB/s" << std::endl;
 
   return 0;
