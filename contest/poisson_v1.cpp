@@ -114,6 +114,8 @@ int main()
 
   auto end = std::chrono::high_resolution_clock::now();
 
+  array_new.print();
+
   // print the metrics
   std::cout << "Converged in " << iter << " iterations" << std::endl;
   std::cout << "Final Error: " << std::scientific << err << std::endl;
