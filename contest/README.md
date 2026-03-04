@@ -46,7 +46,7 @@ Stats using the `g++ -O3 -march=native -fopt-info-vec` compile flags
 
 ```
 ## Version 2
-This version is optimalized sequential code, featuring loop reordering and vectorization.
+This version is optimalized sequential code, featuring loop reordering, vectorization and cache blocking.
 
 ### n = 8192
 ```txt
@@ -62,4 +62,4 @@ This version is optimalized sequential code, featuring loop reordering and vecto
 
 ```
 ## Version 3
-Simple paralelization.
+Multithreading using the loops from version 2.
