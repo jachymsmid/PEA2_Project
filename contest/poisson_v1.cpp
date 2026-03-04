@@ -1,4 +1,6 @@
+#include <chrono>
 #include <cmath>
+#include <iomanip>
 #include <iostream>
 #include <vector>
 #include <utility>
@@ -56,12 +58,11 @@ public:
 int main()
 {
   // define constants
-  const int n = 10; // number of nodes
-  const RealType epsilon = 1e-6;
+  const int n = 8192; // number of nodes
   const RealType length = 1.f;
   const RealType step = length/(float)n;
   const RealType pi = M_PI;
-  const int iter_stop=100;
+  const int iter_stop = 100;
   const RealType coeff = step*step/4;
 
   // create thrree flattened arrays
@@ -93,6 +94,10 @@ int main()
 
   
   RealType err,max_err;
+  int iteration;
+
+  // main loop
+  auto start = std::chrono::high_resolution_clock::now();
   for (int iter = 0; iter < iter_stop; iter++)
   {
     max_err = 0;
@@ -108,14 +113,24 @@ int main()
     }
     
     // BC need not be imposed as they stay zero, default value for std::vector
-
     // swap the arrays, instead of copying them
     array_old.swap(array_new);
-
-    if (max_err < epsilon) break;
+    iteration = iter;
   }
 
-  array_new.print();
-  std::cout << "Last encountered maximal grid error: " << max_err << std::endl;
+  auto end = std::chrono::high_resolution_clock::now();
+
+  // print the metrics
+  std::cout << "Converged in " << iteration << " iterations" << std::endl;
+  std::cout << "Final Error: " << std::scientific << max_err << std::endl;
+  std::chrono::duration<double> elapsed = end - start;
+  std::cout << "Elapsed time: " << elapsed.count() << " seconds" << std::endl;
+
+  auto flopsPerSecond = (double)(n - 2) * (n - 2) * 6 * iteration / elapsed.count();
+  std::cout << "Performance: " << std::fixed << std::setprecision(2) << flopsPerSecond / 1e9 << " GFLOPS" << std::endl;
+
+  auto memoryPerSecond = (double)(n - 2) * (n - 2) * 7 * sizeof(RealType) * iteration / elapsed.count();
+  std::cout << "Memory Bandwidth: " << std::fixed << std::setprecision(2) << memoryPerSecond / (1024 * 1024 * 1024) << " GB/s" << std::endl;
+
   return 0;
 }
