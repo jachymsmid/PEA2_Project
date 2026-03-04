@@ -58,10 +58,13 @@ public:
 
 };
 
+
+
+
 int main()
 {
   // define constants
-  const int n = 8192; // number of nodes
+  const std::size_t n = 8192;
   const RealType length = 1.f;
   const RealType step = length/(float)n;
   const RealType pi = M_PI;
@@ -69,17 +72,21 @@ int main()
   const RealType tolerance = 1e-6;
   const RealType coeff = step*step/4;
 
-  // Pre-load constants into 256-bit registers (8 copies of each)
+  // 256x256 floats = 64 KB per block
+  const int BLOCK_SIZE = 256; 
+
+  // pre-load constants into 256-bit registers, 8x32 = 256, |float| = 32
   __m256 vec_quarter = _mm256_set1_ps(0.25f);
   __m256 vec_coeff   = _mm256_set1_ps(coeff);
-  __m256 vec_max_err = _mm256_setzero_ps(); // Holds 8 local maximums
+  // vector of errors (8)
+  __m256 vec_max_err = _mm256_setzero_ps();
 
-  // create thrree flattened arrays
+  // create three flattened arrays
   FlatArray<RealType> array_old(n,n);
   FlatArray<RealType> array_new(n,n);
   FlatArray<RealType> f_array(n,n);
 
-  // fill the arrays
+  // fill the rhs array
   float x,y;
   for (int i=0; i < n-1; i++)
   {
@@ -95,64 +102,114 @@ int main()
   }
 
   
-  RealType err;
+  RealType max_err;
   std::size_t iter = 0;
 
   // main loop
   auto start = std::chrono::high_resolution_clock::now();
   while (iter < 10)
   {
-    err = 0.0;
-    // update the inner values
-    for (int i = 1; i < n-1; i++)
+    max_err = 0.0;
+
+    
+
+    // iterate over blocks of size BLOCK_SIZE
+    for (int bi = 1; bi < n - 1; bi += BLOCK_SIZE)
     {
-      for (int j = 1; j <= n - 1 - 8; j += 8)
+      for (int bj = 1; bj < n - 1; bj += BLOCK_SIZE)
       {
-        // 1. LOAD: Grab 8 floats from each neighbor direction
-        // _mm256_loadu_ps means "load unaligned packed single-precision floats"
-        __m256 top    = _mm256_loadu_ps(&array_old(i - 1, j));
-        __m256 bottom = _mm256_loadu_ps(&array_old(i + 1, j));
-        __m256 left   = _mm256_loadu_ps(&array_old(i, j - 1));
-        __m256 right  = _mm256_loadu_ps(&array_old(i, j + 1));
-        __m256 f_val  = _mm256_loadu_ps(&f_array(i, j));
-        __m256 old_c  = _mm256_loadu_ps(&array_old(i, j)); // old center
+        // calculate where this specific block ends, not to overflow 
+        int i_end = std::min<int>(bi + BLOCK_SIZE, n - 1);
+        int j_end = std::min<int>(bj + BLOCK_SIZE, n - 1);
 
-        // 2. COMPUTE: Add the neighbors together
-        __m256 sum = _mm256_add_ps(top, bottom);
-        sum = _mm256_add_ps(sum, left);
-        sum = _mm256_add_ps(sum, right);
+        RealType block_max_err = 0.f;
 
-        // 3. COMPUTE: Apply coefficients (0.25 * sum + coeff * f_val)
-        __m256 term1   = _mm256_mul_ps(vec_quarter, sum);
-        __m256 term2   = _mm256_mul_ps(vec_coeff, f_val);
-        __m256 new_val = _mm256_add_ps(term1, term2);
+        // iterate in the current block
+        for (int i = bi; i < i_end; i++)
+        {
+          // vectorize using AVX2
+          int j = bj;
+          for (; j <= j_end - 8; j += 8)
+          {
+            // load 8 cells above, below, to the right and to the left
+            __m256 top    = _mm256_loadu_ps(&array_old(i - 1, j));
+            __m256 bottom = _mm256_loadu_ps(&array_old(i + 1, j));
+            __m256 left   = _mm256_loadu_ps(&array_old(i, j - 1));
+            __m256 right  = _mm256_loadu_ps(&array_old(i, j + 1));
+            __m256 f_val  = _mm256_loadu_ps(&f_array(i, j));
+            __m256 old_c  = _mm256_loadu_ps(&array_old(i, j)); // old center
 
-        // 4. STORE: Write the 8 new values back to memory
-        _mm256_storeu_ps(&array_new(i, j), new_val);
+            // addition, sum = u(i+1,j)+u(i-1,j)+u(i,j+1)+u(i,j-1)
+            __m256 sum = _mm256_add_ps(top, bottom);
+            sum = _mm256_add_ps(sum, left);
+            sum = _mm256_add_ps(sum, right);
 
-        // 5. ERROR CALCULATION: Get absolute difference
-        // Trick: abs(x) is the maximum of (a-b) and (b-a)
-        __m256 diff1 = _mm256_sub_ps(new_val, old_c);
-        __m256 diff2 = _mm256_sub_ps(old_c, new_val);
-        __m256 abs_diff = _mm256_max_ps(diff1, diff2);
+            // apply coefficients, term1 = 0.25 * sum, term2 = coeff * f_val
+            __m256 term1   = _mm256_mul_ps(vec_quarter, sum);
+            __m256 term2   = _mm256_mul_ps(vec_coeff, f_val);
+            // addition, new_val = term1 + term2
+            __m256 new_val = _mm256_add_ps(term1, term2);
 
-        // Update the running maximum error vector
-        vec_max_err = _mm256_max_ps(vec_max_err, abs_diff);
+            // write the 8 new values
+            _mm256_storeu_ps(&array_new(i, j), new_val);
+
+            // error calculation 
+            // difference, diff1 = u^n+1 - u^n
+            __m256 diff1 = _mm256_sub_ps(new_val, old_c);
+            // difference, diff1 = u^n - u^n+1
+            __m256 diff2 = _mm256_sub_ps(old_c, new_val);
+            // absolute value, abs_diff = max(diff1, diff2)
+            __m256 abs_diff = _mm256_max_ps(diff1, diff2);
+
+            // update maximum, vec_err = max(vec_err, abs_diff)
+            vec_max_err = _mm256_max_ps(vec_max_err, abs_diff);
+
+            // !! error extraction generated by GEMINI !!
+            // extract the error from AVX loops
+            // divide the vector into two
+            __m128 hi_128 = _mm256_extractf128_ps(vec_max_err, 1);
+            __m128 lo_128 = _mm256_castps256_ps128(vec_max_err);
+            // compare the halves
+            __m128 max_128 = _mm_max_ps(hi_128, lo_128);
+
+            //
+            __m128 hi_64 = _mm_movehl_ps(max_128, max_128); 
+            __m128 max_64 = _mm_max_ps(max_128, hi_64);
+
+            // Step 3: Fold the 64-bit register in half (compare upper 32 to lower 32)
+            __m128 hi_32 = _mm_shuffle_ps(max_64, max_64, _MM_SHUFFLE(1, 1, 1, 1));
+            __m128 final_max_vec = _mm_max_ps(max_64, hi_32); // Now we have 1 max value
+
+            // Step 4: Extract the lowest 32-bit float into a standard C++ variable
+            float avx_max_err = _mm_cvtss_f32(final_max_vec);
+
+            // clean-up loop
+            for (; j < j_end; j++)
+            {
+              array_new(i, j) = 0.25f * (array_old(i - 1, j) + array_old(i + 1, j) + array_old(i, j - 1) + array_old(i, j + 1)) + coeff * f_array(i, j);
+              block_max_err = std::max(block_max_err, std::abs(array_new(i, j) - array_old(i, j)));
+            }
+
+            // max error in the current block
+            block_max_err = std::max(avx_max_err, block_max_err);
+
+            // max gloabl error
+            max_err = std::max(max_err, avx_max_err);
+          }
+        }
       }
     }
     
-    // BC need not be imposed as they stay zero, default value for std::vector
     // swap the arrays, instead of copying them
     array_old.swap(array_new);
     iter++;
-    std::cout << err << std::endl;
   }
 
   auto end = std::chrono::high_resolution_clock::now();
 
   // print the metrics
   std::cout << "Converged in " << iter << " iterations" << std::endl;
-  std::cout << "Final Error: " << std::scientific << err << std::endl;
+  std::cout << "Final Error: " << std::scientific << max_err << std::endl;
   std::chrono::duration<double> elapsed = end - start;
   std::cout << "Elapsed time: " << elapsed.count() << " seconds" << std::endl;
 
