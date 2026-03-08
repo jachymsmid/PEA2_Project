@@ -130,6 +130,7 @@ int main()
           int j = bj;
           for (; j <= j_end - 8; j += 8)
           {
+            // data loading:
             // load 8 cells above, below, to the right and to the left
             __m256 top    = _mm256_loadu_ps(&array_old(i - 1, j));
             __m256 bottom = _mm256_loadu_ps(&array_old(i + 1, j));
@@ -143,11 +144,10 @@ int main()
             sum = _mm256_add_ps(sum, left);
             sum = _mm256_add_ps(sum, right);
 
-            // apply coefficients, term1 = 0.25 * sum, term2 = coeff * f_val
-            __m256 term1   = _mm256_mul_ps(vec_quarter, sum);
+            // apply coefficient to rhs, term2 = coeff * f_val
             __m256 term2   = _mm256_mul_ps(vec_coeff, f_val);
-            // addition, new_val = term1 + term2
-            __m256 new_val = _mm256_add_ps(term1, term2);
+            // new_val = 0.25*sum + term2
+            __m256 new_val = _mm256_fmadd_ps(vec_quarter, sum, term2);
 
             // write the 8 new values
             _mm256_storeu_ps(&array_new(i, j), new_val);
