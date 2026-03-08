@@ -2,7 +2,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
-#include <array>
+#include <vector>
 #include <utility>
 #include <immintrin.h>
 #include <algorithm>
@@ -10,17 +10,19 @@
 
 using RealType = float;
 
-template <class RealType, std::size_t rows, std::size_t cols>
+template <class RealType>
 class FlatArray
 {
 private:
 
   // is initalized at object construction, constructor not needed
-  std::array<RealType, rows*cols > data_{0.f};
-  std::size_t rows_ = rows;
-  std::size_t cols_ = cols;
+  std::vector<RealType> data_;
+  std::size_t rows_, cols_;
 
 public:
+
+  // constructor
+  FlatArray(int r, int c): rows_(r), cols_(c), data_(r*c, 0.f) {}
 
   std::size_t size()
   {
