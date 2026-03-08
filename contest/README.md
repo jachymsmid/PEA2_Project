@@ -30,36 +30,13 @@ NOTE: Multiple versions will be created along the progression of the course of P
 This version is a simple, a bit optimized, sequential programm. I used flattened arrays for faster data access. I also created a class FlatArray for easier handling and some useful member function for more readable code.
 The class also features `swap()` method for data swaping between two arrays (mby simple pointer swap would be faster?).
 
-Stats using the `g++ -O3 -march=native -fopt-info-vec` compile flags
-
-### n = 8192
-```txt
-
-```
-
-### n = 16384
-```txt
-
-```
-### n = 32176
-```txt
-
-```
 ## Version 2
-This version is optimalized sequential code, featuring loop reordering, vectorization and cache blocking.
+This version is optimalized sequential code, featuring loop reordering, vectorization (intrinsics) and cache blocking.
 
-### n = 8192
-```txt
-
-```
-
-### n = 16384
-```txt
-
-```
-### n = 32176
-```txt
-
-```
 ## Version 3
-Multithreading using the loops from version 2.
+Multithreading of the code from version 2 using OpenMP.
+
+## Version 4
+
+
+# Benchmarking and comparison
