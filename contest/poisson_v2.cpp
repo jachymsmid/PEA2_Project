@@ -85,9 +85,9 @@ int main()
   __m256 vec_max_err = _mm256_setzero_ps();
 
   // create three flattened arrays of size n x n
-  FlatArray<RealType, n, n> array_old;
-  FlatArray<RealType, n, n> array_new;
-  FlatArray<RealType, n, n> f_array;
+  FlatArray<RealType> array_old(n,n);
+  FlatArray<RealType> array_new(n,n);
+  FlatArray<RealType> f_array(n,n);
 
   // fill the rhs array
   float x,y;
