@@ -2,7 +2,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
-#include <vector>
+#include <array>
 #include <utility>
 #include <immintrin.h>
 #include <algorithm>
@@ -10,51 +10,55 @@
 
 using RealType = float;
 
-template <class RealType>
+template <class RealType, std::size_t rows, std::size_t cols>
 class FlatArray
 {
 private:
 
-    int rows, cols;
-    std::vector<RealType> data;
+  // is initalized at object construction, constructor not needed
+  std::array<RealType, rows*cols > data_{0.f};
+  std::size_t rows_ = rows;
+  std::size_t cols_ = cols;
 
 public:
 
-    // constructor
-    FlatArray(int r, int c) : rows(r), cols(c), data(r*c,0.0f) {}
+  std::size_t size()
+  {
+    return cols_*rows_;
+  }
 
-    // access the data with matrix indexing
-    inline RealType& operator()(int r, int c)
-    {
-        return data[r * cols + c];
-    }
+  // access the data with matrix indexing
+  inline RealType& operator()(int r, int c)
+  {
+      return data_[r * cols_ + c];
+  }
 
-    inline const RealType& operator()(int r, int c) const
-    {
-        return data[r * cols + c];
-    }
+  inline const RealType& operator()(int r, int c) const
+  {
+      return data_[r * cols_ + c];
+  }
 
-    // print the stored data
-    void print()
+  // print the stored data
+  void print()
+  {
+    for (int i = 0; i < rows_; i++)
     {
-      for (int i = 0; i<rows; i++)
+      for (int j = 0; j < cols_; j++)
       {
-        for (int j = 0; j<cols; j++)
-        {
-          std::cout<< data[i*cols+j] << " ";
-        }
-        std::cout<<std::endl;
+        std::cout<< data_[i*cols_+j] << " ";
       }
+      std::cout<<std::endl;
     }
+  }
 
-    // using swap instead of copying the arrays, I only need the array_old
-    // just trust the arrays are of the same size xd
-    void swap(FlatArray& other)
-    {
-      std::swap(rows, other.rows);
-      std::swap(cols, other.cols);
-      data.swap(other.data);
-    }
+  // using swap instead of copying the arrays, I only need the array_old
+  // just trust the arrays are of the same size xd
+  void swap(FlatArray& other)
+  {
+    std::swap(rows_, other.rows_);
+    std::swap(cols_, other.cols_);
+    data_.swap(other.data_);
+  }
 
 };
 
@@ -78,10 +82,10 @@ int main()
   // vector of errors (8)
   __m256 vec_max_err = _mm256_setzero_ps();
 
-  // create three flattened arrays
-  FlatArray<RealType> array_old(n,n);
-  FlatArray<RealType> array_new(n,n);
-  FlatArray<RealType> f_array(n,n);
+  // create three flattened arrays of size n x n
+  FlatArray<RealType, n, n> array_old;
+  FlatArray<RealType, n, n> array_new;
+  FlatArray<RealType, n, n> f_array;
 
   // fill the rhs array
   float x,y;
