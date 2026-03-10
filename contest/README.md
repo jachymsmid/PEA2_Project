@@ -40,3 +40,6 @@ Multithreading of the code from version 2 using OpenMP.
 
 
 # Benchmarking and comparison
+
+## Roofline model
+
