@@ -36,7 +36,7 @@ def main():
     # hardware specific data, mby need correcting
     PEAK_BW_GBPS = 37.659
     PEAK_GFLOPS = 998.4
-    APP_AI = 0.75
+    APP_AI = 9/7
 
     # parse the output file
     APP_GFLOPS, APP_BW = parse_benchmark(filename)
