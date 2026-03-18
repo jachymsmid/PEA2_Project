@@ -68,7 +68,8 @@ def main():
     plt.legend()
     plt.tight_layout()
 
-    plt.savefig(f"roofline_{filename}_{solver_name}.png")
+    # plt.savefig(f"roofline_{filename}_{solver_name}.png")
+    plt.show()
 
 if __name__ == "__main__":
     main()
