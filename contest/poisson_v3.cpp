@@ -1,0 +1,240 @@
+#include <chrono>
+#include <cmath>
+#include <iomanip>
+#include <iostream>
+#include <vector>
+#include <utility>
+#include <immintrin.h>
+#include <omp.h>
+#include <algorithm>
+
+
+using RealType = float;
+
+template <class RealType>
+class FlatArray
+{
+private:
+
+  // is initalized at object construction, constructor not needed
+  std::vector<RealType> data_;
+  std::size_t rows_, cols_;
+
+public:
+
+  // constructor
+  FlatArray(int r, int c): rows_(r), cols_(c), data_(r*c, 0.f) {}
+
+  std::size_t size()
+  {
+    return cols_*rows_;
+  }
+
+  // access the data with matrix indexing, its block optimalized
+  inline RealType& operator()(int r, int c)
+  {
+      return data_[r * cols_ + c];
+  }
+
+  inline const RealType& operator()(int r, int c) const
+  {
+      return data_[r * cols_ + c];
+  }
+
+  // print the stored data
+  void print()
+  {
+    for (int i = 0; i < rows_; i++)
+    {
+      for (int j = 0; j < cols_; j++)
+      {
+        std::cout<< data_[i*cols_+j] << " ";
+      }
+      std::cout<<std::endl;
+    }
+  }
+
+  // using swap instead of copying the arrays, I only need the array_old
+  // just trust the arrays are of the same size xd
+  void swap(FlatArray& other)
+  {
+    std::swap(rows_, other.rows_);
+    std::swap(cols_, other.cols_);
+    data_.swap(other.data_);
+  }
+
+};
+
+int main()
+{
+  // define constants
+  const std::size_t n = 16348;
+  const RealType length = 1.f;
+  const RealType step = length/((float)n-1.f);
+  const RealType pi = M_PI;
+  const int iter_stop = 100;
+  const RealType tolerance = 1e-6;
+  const RealType coeff = step*step/4;
+
+  // 256x256 floats = 64 KB per block
+  // Rheia has 
+  const int BLOCK_SIZE = 256; 
+
+  // pre-load constants into 256-bit registers, 8x32 = 256, |float| = 32
+  __m256 vec_quarter = _mm256_set1_ps(0.25f);
+  __m256 vec_coeff   = _mm256_set1_ps(coeff);
+
+  // create three flattened arrays of size n x n
+  FlatArray<RealType> array_old(n,n);
+  FlatArray<RealType> array_new(n,n);
+  FlatArray<RealType> f_array(n,n);
+
+  // fill the rhs array
+  float x,y;
+  for (int i=0; i < n-1; i++)
+  {
+    for (int j=0; j < n-1; j++)
+    {
+      // implicit grid coordinates
+      x = i*step;
+      y = j*step;
+
+      // fill the rhs array
+      f_array(i,j) = 2*pi*pi*std::sin(pi*x)*std::sin(pi*y);
+    }
+  }
+
+#if DEBUG_MODE
+
+  int threads = omp_get_max_threads();
+  std::cout << "Max threads: " << threads << std::endl;
+
+#endif
+
+  
+  RealType max_err;
+  std::size_t iter = 0;
+
+  // main loop
+  auto start = std::chrono::high_resolution_clock::now();
+
+  while (iter < iter_stop)
+  {
+    max_err = 0.0;
+
+    // iterate over blocks of size BLOCK_SIZE
+    #pragma omp parallel for  collapse(2) reduction(max : max_err)
+    for (int bi = 1; bi < n - 1; bi += BLOCK_SIZE)
+    {
+      for (int bj = 1; bj < n - 1; bj += BLOCK_SIZE)
+      {
+        // calculate where this specific block ends, not to overflow 
+        int i_end = std::min<int>(bi + BLOCK_SIZE, n - 1);
+        int j_end = std::min<int>(bj + BLOCK_SIZE, n - 1);
+
+        // vector of errors (8)
+        __m256 vec_max_err = _mm256_setzero_ps();
+        // scalar block error
+        RealType block_max_err = 0.f;
+
+        // iterate in the current block
+        for (int i = bi; i < i_end; i++)
+        {
+          // vectorize using AVX2
+          int j = bj;
+          for (; j <= j_end - 8; j += 8)
+          {
+            // data loading:
+            // load 8 cells above, below, to the right and to the left
+            __m256 top    = _mm256_loadu_ps(&array_old(i - 1, j));
+            __m256 bottom = _mm256_loadu_ps(&array_old(i + 1, j));
+            __m256 left   = _mm256_loadu_ps(&array_old(i, j - 1));
+            __m256 right  = _mm256_loadu_ps(&array_old(i, j + 1));
+            __m256 f_val  = _mm256_loadu_ps(&f_array(i, j));
+            __m256 old_c  = _mm256_loadu_ps(&array_old(i, j)); // old center
+
+            // addition, sum = u(i+1,j)+u(i-1,j)+u(i,j+1)+u(i,j-1)
+            __m256 sum = _mm256_add_ps(top, bottom);
+            sum = _mm256_add_ps(sum, left);
+            sum = _mm256_add_ps(sum, right);
+
+            // apply coefficient to rhs, term2 = coeff * f_val
+            __m256 term2   = _mm256_mul_ps(vec_coeff, f_val);
+            // new_val = 0.25*sum + term2
+            __m256 new_val = _mm256_fmadd_ps(vec_quarter, sum, term2);
+
+            // write the 8 new values
+            _mm256_storeu_ps(&array_new(i, j), new_val);
+
+            // error calculation 
+            // difference, diff1 = u^n+1 - u^n
+            __m256 diff1 = _mm256_sub_ps(new_val, old_c);
+            // difference, diff1 = u^n - u^n+1
+            __m256 diff2 = _mm256_sub_ps(old_c, new_val);
+            // absolute value, abs_diff = max(diff1, diff2)
+            __m256 abs_diff = _mm256_max_ps(diff1, diff2);
+
+            // update maximum, vec_err = max(vec_err, abs_diff)
+            vec_max_err = _mm256_max_ps(vec_max_err, abs_diff);
+
+          // clean-up loop
+          }
+
+          for (; j < j_end; j++)
+          {
+            array_new(i, j) = 0.25f * (array_old(i - 1, j) + array_old(i + 1, j) + array_old(i, j - 1) + array_old(i, j + 1)) + coeff * f_array(i, j);
+            block_max_err = std::max(block_max_err, std::abs(array_new(i, j) - array_old(i, j)));
+          }
+
+          
+        }
+
+        // !! error extraction generated by GEMINI !!
+        // extract the error from AVX loops
+        // divide the vector into two
+        __m128 hi_128 = _mm256_extractf128_ps(vec_max_err, 1);
+        __m128 lo_128 = _mm256_castps256_ps128(vec_max_err);
+
+        // compare the halves
+        __m128 max_128 = _mm_max_ps(hi_128, lo_128);
+
+        //
+        __m128 hi_64 = _mm_movehl_ps(max_128, max_128); 
+        __m128 max_64 = _mm_max_ps(max_128, hi_64);
+
+        // Step 3: Fold the 64-bit register in half (compare upper 32 to lower 32)
+        __m128 hi_32 = _mm_shuffle_ps(max_64, max_64, _MM_SHUFFLE(1, 1, 1, 1));
+        __m128 final_max_vec = _mm_max_ps(max_64, hi_32); // Now we have 1 max value
+
+        // Step 4: Extract the lowest 32-bit float into a standard C++ variable
+        float avx_max_err = _mm_cvtss_f32(final_max_vec);
+
+        // max error in the current block
+        block_max_err = std::max(avx_max_err, block_max_err);
+
+        // max gloabl error
+        max_err = std::max(max_err, avx_max_err);
+      }
+    }
+    
+    // swap the arrays, instead of copying them
+    array_old.swap(array_new);
+    iter++;
+  }
+
+  auto end = std::chrono::high_resolution_clock::now();
+
+  // print the metrics
+  std::cout << "Converged in " << iter << " iterations" << std::endl;
+  std::cout << "Final Error: " << std::scientific << max_err << std::endl;
+  std::chrono::duration<double> elapsed = end - start;
+  std::cout << "Elapsed time: " << elapsed.count() << " seconds" << std::endl;
+
+  auto flopsPerSecond = (double)(n - 2) * (n - 2) * 7 * iter / elapsed.count();
+  std::cout << "Performance: " << std::fixed << std::setprecision(2) << flopsPerSecond / 1e9 << " GFLOPS" << std::endl;
+
+  auto memoryPerSecond = (double)(n - 2) * (n - 2) * 7 * sizeof(RealType) * iter / elapsed.count();
+  std::cout << "Memory Bandwidth: " << std::fixed << std::setprecision(2) << memoryPerSecond / (1024 * 1024 * 1024) << " GB/s" << std::endl;
+
+  return 0;
+}
